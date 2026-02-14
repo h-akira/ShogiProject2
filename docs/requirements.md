@@ -50,7 +50,7 @@ graph LR
 | フロントエンド | Vue 3 + TypeScript |
 | 将棋盤 | 独自実装（テキスト駒、CSS Grid） |
 | API | Lambda + API Gateway（REST JSON） |
-| 認証 | Amazon Cognito + JWT（Amplify SDK） |
+| 認証 | Amazon Cognito Managed Login + oidc-client-ts |
 | DB | DynamoDB（Single Table Design） |
 | 局面解析 | SQS FIFO → コンテナイメージLambda（やねうら王） |
 | ホスティング | CloudFront + S3（同一オリジン構成） |
@@ -73,22 +73,21 @@ graph LR
 
 #### F-AUTH-01: サインアップ
 
-- メールアドレスとパスワードでアカウントを作成できる
+- Cognito Managed Login ページでメールアドレスとパスワードでアカウントを作成できる
 - 確認コードがメールで送信され、入力すると登録が完了する
 
 #### F-AUTH-02: ログイン / ログアウト
 
-- メールアドレスとパスワードでログインできる
+- Cognito Managed Login ページでメールアドレスとパスワードでログインできる
 - ログアウトするとトークンが破棄され、認証が必要な操作ができなくなる
 
 #### F-AUTH-03: パスワード変更
 
-- ログイン済みのユーザーが現在のパスワードを入力して新しいパスワードに変更できる
+- Cognito Managed Login ページでパスワードを変更できる
 
 #### F-AUTH-04: パスワードリセット
 
-- パスワードを忘れた場合、メールアドレスを入力すると確認コードが送信される
-- 確認コードと新しいパスワードを入力してパスワードをリセットできる
+- Cognito Managed Login ページでパスワードをリセットできる
 
 #### F-AUTH-05: アカウント削除
 
@@ -282,7 +281,7 @@ graph LR
 | ID | 要件 |
 |----|------|
 | NF-SEC-01 | 認証にはAmazon Cognitoを使用し、JWTトークンでAPI認証を行う |
-| NF-SEC-02 | トークンはlocalStorageに保管し、API GatewayのCognito Authorizerで検証する |
+| NF-SEC-02 | トークンはsessionStorageに保管し、API GatewayのCognito Authorizerで検証する |
 | NF-SEC-03 | 共有棋譜以外のリソースは認証済みユーザーのみアクセス可能 |
 | NF-SEC-04 | 他ユーザーのリソースへのアクセスは拒否する |
 | NF-SEC-05 | フロントエンドはVueの自動エスケープとCSPヘッダーでXSS対策を行う |
@@ -323,17 +322,14 @@ graph LR
 
 #### メイン画面遷移
 
+> サインアップ / ログイン / パスワードリセット は Cognito Managed Login ページで処理される。
+> SPA内には認証画面を持たず、未認証時は Managed Login にリダイレクトする。
+
 ```mermaid
 graph TD
   Home[ホーム]
-
-  subgraph 認証
-    Login[ログイン]
-    Signup[サインアップ]
-    Verify[メール確認]
-    ForgotPW[パスワード忘却]
-    ResetPW[パスワードリセット]
-  end
+  ML[Cognito Managed Login<br/>サインアップ / ログイン / PW リセット]
+  Callback[/callback<br/>トークン取得]
 
   subgraph 棋譜
     KifuList[棋譜一覧（マイページ）]
@@ -350,14 +346,9 @@ graph TD
     TagDetail[タグ別棋譜一覧]
   end
 
-  Home -->|未ログイン| Login
-  Home -->|未ログイン| Signup
-  Signup --> Verify
-  Verify --> Login
-  Login --> ForgotPW
-  ForgotPW --> ResetPW
-  ResetPW --> Login
-  Login --> Home
+  Home -->|未ログイン| ML
+  ML --> Callback
+  Callback --> Home
   Home -->|ログイン済| KifuList
   Home -->|ログイン済| Explorer
   Home -->|ログイン済| TagList
@@ -377,34 +368,30 @@ graph TD
 graph LR
   subgraph ユーザー設定
     Profile[プロフィール]
-    ChangePW[パスワード変更]
     DeleteAccount[アカウント削除]
   end
 
   SharedKifu[共有棋譜閲覧]
 ```
 
-| 画面 | パス | 認証 |
-|------|------|------|
-| ログイン | `/login` | 不要 |
-| サインアップ | `/signup` | 不要 |
-| メール確認 | `/verify` | 不要 |
-| パスワード忘却 | `/forgot-password` | 不要 |
-| パスワードリセット | `/reset-password` | 不要 |
-| ホーム | `/` | 不要（ログイン状態で表示内容が変わる） |
-| 棋譜一覧 | `/kifus` | 要 |
-| 棋譜作成 | `/kifus/new` | 要 |
-| 棋譜詳細 | `/kifus/:kid` | 要 |
-| 棋譜編集 | `/kifus/:kid/edit` | 要 |
-| フォルダエクスプローラー | `/explorer` | 要 |
-| タグ一覧 | `/tags` | 要 |
-| タグ作成 | `/tags/new` | 要 |
-| タグ編集 | `/tags/:tid/edit` | 要 |
-| タグ別棋譜一覧 | `/tags/:tid` | 要 |
-| プロフィール | `/profile` | 要 |
-| パスワード変更 | `/change-password` | 要 |
-| アカウント削除 | `/delete-account` | 要 |
-| 共有棋譜閲覧 | `/shared/:share_code` | 不要 |
+| 画面 | パス | 認証 | 備考 |
+|------|------|------|------|
+| ホーム | `/` | 不要（ログイン状態で表示内容が変わる） | |
+| コールバック | `/callback` | 不要 | Cognito Managed Login からのリダイレクト受信 |
+| 棋譜一覧 | `/kifus` | 要 | |
+| 棋譜作成 | `/kifus/new` | 要 | |
+| 棋譜詳細 | `/kifus/:kid` | 要 | |
+| 棋譜編集 | `/kifus/:kid/edit` | 要 | |
+| フォルダエクスプローラー | `/explorer` | 要 | |
+| タグ一覧 | `/tags` | 要 | |
+| タグ作成 | `/tags/new` | 要 | |
+| タグ編集 | `/tags/:tid/edit` | 要 | |
+| タグ別棋譜一覧 | `/tags/:tid` | 要 | |
+| プロフィール | `/profile` | 要 | |
+| アカウント削除 | `/delete-account` | 要 | |
+| 共有棋譜閲覧 | `/shared/:share_code` | 不要 | |
+
+> パスワード変更はCognito Managed Loginページで行う。SPA内の画面は不要。
 
 ---
 

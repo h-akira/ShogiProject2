@@ -7,7 +7,7 @@
 
 - **フロントエンド**: Vue 3 + TypeScript、独自将棋盤コンポーネント（shogi-sampleベース）
 - **バックエンド**: Lambda + API Gateway（REST JSON API、Lambdalith構成）
-- **認証**: Cognito + JWT（フロントからCognito SDK直接、APIはJWT検証のみ）
+- **認証**: Cognito Managed Login + oidc-client-ts（詳細は [auth-design.md](auth-design.md) を参照）
 - **DB**: DynamoDB Single Table Design（旧システムのキー設計を踏襲）
 - **局面解析**: SQS FIFO + コンテナイメージLambda（踏襲）
 
@@ -18,7 +18,7 @@
 ```
 [Vue 3 SPA] --(HTTPS)--> [API Gateway + Cognito Authorizer] --> [Lambda] --> [DynamoDB]
      |                                                              |
-     +-- Cognito SDK 直接呼出（認証操作）                           +-- [SQS FIFO] --> [Analysis Lambda (Docker)]
+     +-- Cognito Managed Login（リダイレクト認証）                  +-- [SQS FIFO] --> [Analysis Lambda (Docker)]
 ```
 
 ### Lambda構成
@@ -32,12 +32,14 @@
 
 | 操作 | 実行場所 | 方式 |
 |------|----------|------|
-| サインアップ / ログイン / メール確認 | フロントエンド | Cognito SDK直接 |
-| パスワード変更 / リセット | フロントエンド | Cognito SDK直接 |
-| ログアウト | フロントエンド | Cognito SDK直接 |
-| API呼出 | フロントエンド → API Gateway | `Authorization: Bearer {ID Token}` |
+| サインアップ / ログイン / メール確認 | Cognito Managed Login | リダイレクトベース（Authorization Code + PKCE） |
+| パスワード変更 / リセット | Cognito Managed Login | リダイレクトベース |
+| ログアウト | フロントエンド | oidc-client-ts（Cognito logout endpoint） |
+| API呼出 | フロントエンド → API Gateway | `Authorization: Bearer {Access Token}` |
 | JWT検証 | API Gateway | Cognito Authorizer（自動） |
 | ユーザー特定 | Lambda | `event.requestContext.authorizer.claims["cognito:username"]` |
+
+> 認証設計の詳細は [auth-design.md](auth-design.md) を参照。
 
 ---
 
@@ -654,17 +656,18 @@ AI解析リクエストを送信する。SQS FIFOキューにメッセージを�
 
 ## 7. 認証フロー
 
-### フロントエンドの認証操作（Cognito SDK直接）
+> 認証設計の詳細は [auth-design.md](auth-design.md) を参照。
 
-| 操作 | Cognito SDK メソッド |
-|------|---------------------|
-| サインアップ | `signUp()` |
-| メール確認 | `confirmSignUp()` |
-| ログイン | `signIn()` |
-| ログアウト | `signOut()` |
-| パスワード変更 | `changePassword()` |
-| パスワード忘却（コード送信） | `forgotPassword()` |
-| パスワードリセット（コード確認） | `forgotPasswordSubmit()` |
+### 認証方式
+
+Cognito Managed Login を使用する。SPA内にカスタムログインフォームは持たず、
+Cognitoのログインページにリダイレクトする方式（Authorization Code + PKCE）を採用する。
+
+| 操作 | 処理場所 |
+|------|----------|
+| サインアップ / ログイン / PW変更 / PWリセット | Cognito Managed Login（リダイレクト） |
+| トークン取得・管理 | oidc-client-ts |
+| ログアウト | oidc-client-ts（Cognito logout endpoint） |
 
 ### API Gateway Cognito Authorizer
 
@@ -728,27 +731,23 @@ Globals:
 
 ## 9. Lambda関数構成
 
+> ディレクトリ構成の詳細は [project-structure.md](project-structure.md) セクション 2.4 を参照。
+
 ```
-Lambda/
-  handler.py              # メインハンドラー（ルーティング）
-  routes/
-    kifus.py              # 棋譜関連エンドポイント
-    tags.py               # タグ関連エンドポイント
-    analysis.py           # 解析関連エンドポイント
-    users.py              # ユーザー関連エンドポイント
-    shared.py             # 共有棋譜エンドポイント
-  services/
-    kifu_service.py       # 棋譜ビジネスロジック
-    tag_service.py        # タグビジネスロジック
-    analysis_service.py   # 解析ビジネスロジック
-    user_service.py       # ユーザービジネスロジック
-  models/
-    dynamo.py             # DynamoDBアクセス層
-  utils/
-    shogi.py              # 将棋ロジック（SFEN→日本語棋譜変換等）
-    pagination.py         # ページネーションヘルパー
-    validation.py         # バリデーションヘルパー
-    errors.py             # エラーハンドリング
+Backend/
+  src/                        # Lambda パッケージ対象（CodeUri）
+    app.py                    # Lambda ハンドラ / ルーティング
+    routes/
+      users.py                # ユーザー関連エンドポイント
+      kifus.py                # 棋譜関連エンドポイント
+      tags.py                 # タグ関連エンドポイント
+      analysis.py             # 解析関連エンドポイント
+    services/                 # ビジネスロジック
+    repositories/             # DynamoDBアクセス
+    common/                   # 共通ユーティリティ
+  tests/
+  requirements.txt
+  template.yaml               # SAM テンプレート（CodeUri: src/）
 ```
 
 ---
@@ -758,10 +757,10 @@ Lambda/
 | 項目 | 旧システム | 新システム |
 |------|-----------|-----------|
 | アーキテクチャ | SSR (WAMBDA) | SPA (Vue 3) + REST API |
-| 認証処理 | サーバー側で全処理 | フロントでCognito SDK、APIはJWT検証のみ |
+| 認証処理 | サーバー側で全処理 | Cognito Managed Login（リダイレクト）、APIはJWT検証のみ |
 | APIレスポンス | HTML | JSON |
 | URL構造 | `/kifu/index/{username}` | `/api/v1/kifus`（usernameはJWTから取得） |
-| セッション管理 | Cookie (JWT in Cookie) | Authorization Bearerヘッダー |
+| セッション管理 | Cookie (JWT in Cookie) | Authorization Bearerヘッダー（sessionStorage） |
 | フォルダパス | Base64 URLパス | Base64 クエリパラメータ |
 | 将棋盤 | shogi-playerライブラリ | 独自実装（shogi-sampleベース） |
 | DynamoDB | Single Table | Single Table（踏襲） |
