@@ -526,71 +526,30 @@ AI解析リクエストを送信する。SQS FIFOキューにメッセージを�
 
 ## 5. DynamoDB テーブル設計 (Single Table Design)
 
-### 5.1 テーブル基本情報
+> 詳細は [database-design.md](database-design.md) を参照。
 
-| 項目 | 値 |
-|------|-----|
-| テーブル名 | `table-sgp-pro-main` |
-| Partition Key | `pk` (String) |
-| Sort Key | `sk` (String) |
-| 課金モード | PAY_PER_REQUEST (On-Demand) |
-| TTL属性 | `expired` |
+Single Table Design を採用し、1つのテーブル（`table-sgp-pro-main`）で全エンティティを管理する。
 
-### 5.2 エンティティとキー設計
+### エンティティ
 
-#### 棋譜 (Kifu)
+| エンティティ | PK | SK | 説明 |
+|-------------|-----|-----|------|
+| 棋譜 | `kifu#uname#{username}` | `kid#{kid}` | 棋譜データ本体 |
+| タグ | `tag#uname#{username}` | `tid#{tid}` | タグマスタ |
+| 棋譜-タグ関連 | `tag#kid#{kid}` | `tid#{tid}` | 多対多の関連（タグ名を非正規化） |
+| 解析 | `analysis` | `aid#{aid}` | AI解析リクエスト・結果（TTL自動削除） |
 
-| 属性 | 値 | 例 |
-|------|-----|-----|
-| `pk` | `kifu#uname#{username}` | `kifu#uname#hakira` |
-| `sk` | `kid#{kid}` | `kid#aBcDeFgHiJkL` |
-| `cgsi_pk` | `scode#{share_code}` | `scode#aBcDeFgH...` |
-| `clsi_sk` | `slug#{slug}.kif` | `slug#2025/01/vs-tanaka.kif` |
-| `kifu` | KIF形式文字列 | - |
-| `memo` | メモ文字列 | - |
-| `first_or_second` | `none` / `first` / `second` | `first` |
-| `result` | `none` / `win` / `lose` / `sennichite` / `jishogi` | `win` |
-| `share` | Boolean | `true` |
-| `created` | ISO文字列 | `2025-01-20 14:30:00` |
-| `latest_update` | ISO文字列 | `2025-01-21 09:15:00` |
+### インデックス
 
-#### タグ (Tag)
+| Index | 種別 | 用途 |
+|-------|------|------|
+| CommonLSI | LSI | slug検索、タグ名検索、フォルダエクスプローラー |
+| LatestUpdateIndex | LSI | 棋譜一覧（最終更新順） |
+| CreatedIndex | LSI | 解析レート制限チェック |
+| CommonGSI | GSI | 共有コード検索 |
+| SwapIndex | GSI | タグ逆引き（タグ削除時） |
 
-| 属性 | 値 | 例 |
-|------|-----|-----|
-| `pk` | `tag#uname#{username}` | `tag#uname#hakira` |
-| `sk` | `tid#{tid}` | `tid#xYz12345` |
-| `clsi_sk` | `tname#{tag_name}` | `tname#居飛車` |
-| `tname` | タグ名 | `居飛車` |
-| `created` | ISO文字列 | `2025-01-10 10:00:00` |
-| `latest_update` | ISO文字列 | `2025-01-10 10:00:00` |
-
-#### 棋譜-タグ関連 (Kifu-Tag Association)
-
-| 属性 | 値 | 例 |
-|------|-----|-----|
-| `pk` | `tag#kid#{kid}` | `tag#kid#aBcDeFgHiJkL` |
-| `sk` | `tid#{tid}` | `tid#xYz12345` |
-| `clsi_sk` | `tname#{tag_name}` | `tname#居飛車` |
-| `tname` | タグ名（非正規化） | `居飛車` |
-| `latest_update` | ISO文字列 | `2025-01-20 14:30:00` |
-
-#### 解析 (Analysis)
-
-| 属性 | 値 | 例 |
-|------|-----|-----|
-| `pk` | `analysis` | `analysis` |
-| `sk` | `aid#{aid}` | `aid#aNaLySiS12345` |
-| `cgsi_pk` | `analysis#uname#{username}` | `analysis#uname#hakira` |
-| `created` | ISO文字列 | `2025-01-22 10:00:00` |
-| `status` | `waiting` / `successed` / `failed` | `waiting` |
-| `response` | JSON文字列（解析結果） | - |
-| `expired` | UNIX timestamp (Number, TTL) | `1737540000` |
-
-### 5.3 環境変数（Lambda）
-
-旧システムではDynamoDB上にシステム設定エンティティを持っていたが、
-上限値は変更頻度が低いため環境変数で管理する。
+### 環境変数（Lambda）
 
 | 環境変数名 | 型 | デフォルト | 説明 |
 |-----------|-----|----------|------|
@@ -598,38 +557,6 @@ AI解析リクエストを送信する。SQS FIFOキューにメッセージを�
 | `TAG_MAX` | integer | `50` | 1ユーザーあたりのタグ上限数 |
 | `MAIN_TABLE_NAME` | string | - | DynamoDBテーブル名 |
 | `SQS_QUEUE_URL` | string | - | 解析用SQS FIFOキューURL |
-
-### 5.5 インデックス設計
-
-#### Local Secondary Indexes (LSI)
-
-| Index | PK | SK | 用途 |
-|-------|-----|-----|------|
-| CommonLSI | `pk` | `clsi_sk` | slug検索、タグ名検索、フォルダエクスプローラー |
-| LatestUpdateIndex | `pk` | `latest_update` | 棋譜一覧（最終更新順） |
-| CreatedIndex | `pk` | `created` | 解析レート制限チェック（直近1時間） |
-
-#### Global Secondary Indexes (GSI)
-
-| Index | PK | SK | 用途 |
-|-------|-----|-----|------|
-| CommonGSI | `cgsi_pk` | - | 共有コード検索 |
-| SwapIndex | `sk` | `pk` | タグ逆引き（タグ削除時等） |
-
-### 5.6 アクセスパターン対応表
-
-| アクセスパターン | Table/Index | クエリ条件 |
-|-----------------|-------------|-----------|
-| 棋譜一覧（最終更新順） | LatestUpdateIndex | pk=`kifu#uname#{user}`, ScanIndexForward=false |
-| 棋譜詳細取得 | Main | pk=`kifu#uname#{user}`, sk=`kid#{kid}` |
-| slug重複チェック | CommonLSI | pk=`kifu#uname#{user}`, clsi_sk=`slug#{slug}.kif` |
-| フォルダエクスプローラー | CommonLSI | pk=`kifu#uname#{user}`, clsi_sk begins_with `slug#{path}/` |
-| 共有コード検索 | CommonGSI | cgsi_pk=`scode#{code}` |
-| タグ一覧 | Main | pk=`tag#uname#{user}` |
-| 棋譜のタグ取得 | Main | pk=`tag#kid#{kid}` |
-| タグの棋譜逆引き | SwapIndex | sk=`tid#{tid}`, pk begins_with `tag#kid#` |
-| 解析結果取得 | Main | pk=`analysis`, sk=`aid#{aid}` |
-| 解析レート制限チェック | CreatedIndex | pk=`analysis`, created > (1時間前) |
 
 ---
 
