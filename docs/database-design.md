@@ -75,7 +75,7 @@ latest_update: "2025-01-21 09:15:00"
 | `created` | String | - | 要 | ISO形式 |
 | `latest_update` | String | - | 要 | ISO形式 |
 
-**tid**: 8文字のランダム英数字文字列。
+**tid**: 12文字のランダム英数字文字列。
 
 #### データ例
 
@@ -126,7 +126,7 @@ latest_update: "2025-01-20 14:30:00"
 | `created` | String | LSI-SK | 要 | ISO形式 |
 | `expired` | Number | TTL | 要 | UNIX timestamp（TTL自動削除用） |
 
-**aid**: 8文字のランダム英数字文字列。
+**aid**: 12文字のランダム英数字文字列。
 
 **TTL**: 解析結果は一時的なデータのため、1時間後に自動削除する。
 
@@ -373,7 +373,7 @@ slug変更時は `clsi_sk` が変わるため、slugの重複チェック（パ�
 - CommonLSI、CommonGSI、SwapIndex の基本構造
 - slugベースの階層構造（フォルダエクスプローラー）
 - タグ名の非正規化（関連エンティティに `tname` を保持）
-- kid は12文字、tid / aid は8文字、share_code は36文字のランダム英数字
+- kid / tid / aid は12文字、share_code は36文字のランダム英数字
 
 ### 変更した設計
 
@@ -390,6 +390,7 @@ slug変更時は `clsi_sk` が変わるため、slugの重複チェック（パ�
 | タグの `cgsi_pk` | `tag#uname#{user}#tid#{tid}` | **不使用** | 旧ではGSIでタグを一意に引く用途があったが、新では不要 |
 | `first_or_second` の値 | `先手` / `後手`（日本語） | `first` / `second`（英語） | REST APIのJSON設計に合わせ英語enum化 |
 | `result` の値 | `勝利` / `敗北` 等（日本語） | `win` / `lose` 等（英語） | 同上 |
+| tid / aid の長さ | 8文字 | **12文字** | kid（12文字）と統一 |
 
 ### 移行時の注意
 
