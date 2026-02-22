@@ -39,7 +39,7 @@ AWS リソースの命名やリポジトリ管理に使用する変数を以下�
 
 ---
 
-## ユニット間連携方法
+## 連携方式
 
 ユニット間の値の受け渡しには以下の方法を使用できる。
 
@@ -50,65 +50,81 @@ AWS リソースの命名やリポジトリ管理に使用する変数を以下�
 
 ---
 
-## 個別契約
+## 依存関係とエクスポート一覧
 
-### 1. インフラ → バックエンド（Cognito 情報）
+### 依存関係図
+
+```mermaid
+graph LR
+  infra -->|Cognito 情報| backend-main
+  infra -->|Cognito 情報| backend-analysis
+  infra -->|Cognito 情報, CloudFront 情報等| cicd
+  backend-main -->|API Gateway ID| infra
+  backend-analysis -->|API Gateway ID| infra
+```
+
+infra ↔ backend-main / backend-analysis 間に循環依存が存在する。実装時にはインフラユニット内でスタックを分割するなどして循環を解消すること。
+
+### インフラ → バックエンド（Cognito 情報）
 
 インフラユニットが Cognito の情報を公開し、各バックエンドユニットが参照する。
 
-| キー | 値 | 用途 |
-|------|-----|------|
-| `${project}-${env}-infra-CognitoUserPoolArn` | User Pool ARN | API Gateway の Cognito Authorizer |
-| `${project}-${env}-infra-CognitoUserPoolId` | User Pool ID | Lambda での認証検証（必要な場合） |
-| `${project}-${env}-infra-CognitoClientId` | App Client ID | Lambda での認証検証（必要な場合） |
+| キー | 値 | 用途 | 参照先 |
+|------|-----|------|-------|
+| `${project}-${env}-infra-CognitoUserPoolArn` | User Pool ARN | API Gateway の Cognito Authorizer | backend-main, backend-analysis |
+| `${project}-${env}-infra-CognitoUserPoolId` | User Pool ID | Lambda での認証検証（必要な場合） | backend-main, backend-analysis |
+| `${project}-${env}-infra-CognitoClientId` | App Client ID | Lambda での認証検証（必要な場合） | backend-main, backend-analysis, CI/CD |
 
-**方式**: CloudFormation エクスポートまたはパラメータストア
-
-```yaml
-# SAM template.yaml (エクスポートの場合の例)
-Parameters:
-  Project:
-    Type: String
-    Default: "sgp"
-  Env:
-    Type: String
-    Default: "dev"
-
-Resources:
-  ApiGateway:
-    Type: AWS::Serverless::Api
-    Properties:
-      Auth:
-        DefaultAuthorizer: CognitoAuthorizer
-        Authorizers:
-          CognitoAuthorizer:
-            UserPoolArn: !ImportValue
-              Fn::Sub: "${Project}-${Env}-infra-CognitoUserPoolArn"
-```
-
----
-
-### 2. バックエンド → インフラ（API Gateway ID）
+### バックエンド → インフラ（API Gateway ID）
 
 各バックエンドユニットが API Gateway の情報を公開し、インフラユニットが CloudFront のオリジンとして登録する。
 
-| キー | 値 | 用途 |
-|------|-----|------|
-| `${project}-${env}-${service}-ApiGatewayId` | REST API ID | CloudFront のオリジン設定 |
-| `${project}-${env}-${service}-ApiGatewayStageName` | ステージ名 | CloudFront のオリジンパス |
+| キー | 値 | 用途 | 参照先 |
+|------|-----|------|-------|
+| `${project}-${env}-backend-main-ApiGatewayId` | REST API ID | CloudFront のオリジン設定 | infra |
+| `${project}-${env}-backend-main-ApiGatewayStageName` | ステージ名 | CloudFront のオリジンパス | infra |
+| `${project}-${env}-backend-analysis-ApiGatewayId` | REST API ID | CloudFront のオリジン設定 | infra |
+| `${project}-${env}-backend-analysis-ApiGatewayStageName` | ステージ名 | CloudFront のオリジンパス | infra |
 
-#### 本プロジェクトでの具体値
+CloudFront でのパスパターン割り当ては以下の通り。
 
-| サービス | キー例 | パスパターン |
-|---------|--------|------------|
-| `backend-main` | `sgp-dev-backend-main-ApiGatewayId` | `/api/v1/main/*` |
-| `backend-analysis` | `sgp-dev-backend-analysis-ApiGatewayId` | `/api/v1/analysis/*` |
+| サービス | パスパターン |
+|---------|------------|
+| `backend-main` | `/api/v1/main/*` |
+| `backend-analysis` | `/api/v1/analysis/*` |
+
+### インフラ → CI/CD（デプロイ先情報）
+
+CI/CD パイプラインがデプロイやビルド時の環境変数注入に使用する。
+
+| キー | 値 | 用途 | 参照先 |
+|------|-----|------|-------|
+| `${project}-${env}-infra-S3BucketName` | バケット名 | フロントエンドのデプロイ先 | CI/CD |
+| `${project}-${env}-infra-CloudFrontDistributionId` | Distribution ID | キャッシュ無効化の対象 | CI/CD |
+| `${project}-${env}-infra-CloudFrontDomainName` | ドメイン名 | フロントエンドビルド時の環境変数注入 | CI/CD |
+| `${project}-${env}-infra-CognitoClientId` | App Client ID | フロントエンドビルド時の環境変数注入 | CI/CD |
+| `${project}-${env}-infra-CognitoDomain` | Cognito ドメイン | フロントエンドビルド時の環境変数注入 | CI/CD |
 
 ---
 
-### 3. インフラ → フロントエンド（ビルド設定）
+## フロントエンド ↔ バックエンド通信仕様
 
-CI/CD パイプラインが値を取得し、フロントエンドのビルド時に環境変数として注入する。
+| 項目 | 仕様 |
+|------|------|
+| 認証方式 | `Authorization: Bearer {Access Token}` ヘッダー |
+| データ形式 | JSON (`Content-Type: application/json`) |
+| エラー形式 | `{ "message": "エラーメッセージ" }` |
+| CORS | CloudFront 経由の同一オリジンのためブラウザ上は不要。API Gateway 側の CORS は直接アクセス対策として設定 |
+
+各バックエンドの API エンドポイント一覧は [_api_list.md](_api_list.md) を参照。
+
+> `_api_list.md` は暫定版であり、OpenAPI 定義で置き換える予定。
+
+---
+
+## フロントエンドビルド時の環境変数
+
+CI/CD パイプラインがエクスポート値を取得し、フロントエンドのビルド時に以下の環境変数として注入する。
 
 | 環境変数 | 値の出所 | 用途 |
 |---------|---------|------|
@@ -119,66 +135,22 @@ CI/CD パイプラインが値を取得し、フロントエンドのビルド�
 
 ---
 
-### 4. インフラ → CI/CD（デプロイ先情報）
-
-| キー | 用途 |
-|------|------|
-| `${project}-${env}-infra-S3BucketName` | フロントエンドのデプロイ先 |
-| `${project}-${env}-infra-CloudFrontDistributionId` | キャッシュ無効化の対象 |
-| `${project}-${env}-infra-CognitoClientId` | フロントエンドビルド時の環境変数注入 |
-| `${project}-${env}-infra-CognitoDomain` | フロントエンドビルド時の環境変数注入 |
-| `${project}-${env}-infra-CloudFrontDomainName` | フロントエンドビルド時の環境変数注入 |
-
-**方式**: `buildspec.yml` 内で CloudFormation エクスポートまたはパラメータストアから値を取得する。
-
----
-
-### 5. 各リポジトリ → CI/CD（buildspec.yml）
-
-| リポジトリ | buildspec.yml の責務 |
-|-----------|---------------------|
-| フロントエンド | npm ビルド → S3 sync → CloudFront 無効化 |
-| メイン API | SAM build → SAM deploy |
-| 解析 API | SAM build → SAM deploy |
-| インフラ | CDK deploy |
-
----
-
-### 6. フロントエンド ↔ バックエンド（API 共通仕様）
-
-| 項目 | 仕様 |
-|------|------|
-| 認証方式 | `Authorization: Bearer {Access Token}` ヘッダー |
-| データ形式 | JSON (`Content-Type: application/json`) |
-| エラー形式 | `{ "message": "エラーメッセージ" }` |
-| CORS | CloudFront 経由の同一オリジンのためブラウザ上は不要。API Gateway 側の CORS は直接アクセス対策として設定 |
-
----
-
-### 7. API エンドポイント一覧
-
-各バックエンドの API エンドポイント一覧は [_api_list.md](_api_list.md) を参照。
-
-> `_api_list.md` は暫定版であり、OpenAPI 定義で置き換える予定。
-
----
-
-### 8. バックエンド間連携の方針
+## バックエンド間連携の方針（将来）
 
 現時点ではメイン API と解析 API の間にバックエンド間連携はない。将来的に連携が必要になった場合に備え、以下の方針を定める。
 
-#### 連携方式
+### 連携方式
 
 | 方式 | 用途 | 手段 |
 |------|------|------|
 | 同期連携 | あるバックエンドが別のバックエンドの API を呼び出す | Lambda から API Gateway のエンドポイントを HTTP で呼び出す |
 | 非同期連携 | イベント駆動で別のバックエンドに処理を委譲する | SNS/SQS を介したメッセージング |
 
-#### 認証情報の扱い
+### 認証情報の扱い
 
 バックエンド間連携時の認証は以下のいずれかの方式を採用する。
 
-##### 方式 A: ユーザーのトークンを中継する
+#### 方式 A: ユーザーのトークンを中継する
 
 ```mermaid
 sequenceDiagram
@@ -197,48 +169,14 @@ sequenceDiagram
 - ユーザーコンテキストが保持されるため、呼び出し先でも `cognito:username` を取得可能
 - 追加の認証設定が不要
 
-##### 方式 B: IAM 認証を使用する
+#### 方式 B: IAM 認証を使用する
 
 - Lambda の実行ロールに呼び出し先 API Gateway の `execute-api:Invoke` 権限を付与する
 - IAM 認証（SigV4 署名）で API Gateway を呼び出す
 - ユーザーコンテキストはリクエストボディやヘッダーで明示的に渡す必要がある
 - サービス間通信であることが明確になる
 
-#### 採用方針
+### 採用方針
 
 - **同期連携**: ユーザー操作の文脈で別サービスのデータが必要な場合は**方式 A（トークン中継）**を優先する。シンプルで追加の認証設定が不要なためである
 - **非同期連携**: SNS/SQS を介する場合はトークンを中継できないため、**方式 B（IAM 認証）**または認証不要な内部エンドポイントを使用する
-
----
-
-## エクスポート / パラメータストア一覧
-
-各スタック間で交換される値の一覧。キーのパターンは `${project}-${env}-${service}-<リソース名>`。
-
-### インフラ (`infra`)
-
-| キー | 値 | 参照先 |
-|------|-----|-------|
-| `...-infra-CognitoUserPoolArn` | User Pool ARN | backend-main, backend-analysis |
-| `...-infra-CognitoUserPoolId` | User Pool ID | backend-main, backend-analysis |
-| `...-infra-CognitoClientId` | App Client ID | backend-main, backend-analysis, CI/CD |
-| `...-infra-CognitoDomain` | Cognito ドメイン | CI/CD |
-| `...-infra-CloudFrontDistributionId` | Distribution ID | CI/CD |
-| `...-infra-S3BucketName` | バケット名 | CI/CD |
-| `...-infra-CloudFrontDomainName` | ドメイン名 | CI/CD |
-
-### メイン API (`backend-main`)
-
-| キー | 値 | 参照先 |
-|------|-----|-------|
-| `...-backend-main-ApiGatewayId` | REST API ID | infra |
-| `...-backend-main-ApiGatewayStageName` | ステージ名 | infra |
-
-### 解析 API (`backend-analysis`)
-
-| キー | 値 | 参照先 |
-|------|-----|-------|
-| `...-backend-analysis-ApiGatewayId` | REST API ID | infra |
-| `...-backend-analysis-ApiGatewayStageName` | ステージ名 | infra |
-
-> `...` は `${project}-${env}` の省略（例: `sgp-dev`）
