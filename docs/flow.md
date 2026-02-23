@@ -10,11 +10,15 @@
 graph TD
   A[1. user_stories.md] --> C[3. units_definition.md]
   B[2. technical_policies.md] --> C
-  A --> D[4. units_contracts.md]
-  B --> D
-  C --> D
-  A --> F["5. openapi_*.yaml"]
+  B --> G
+  C --> G
+  A --> F["openapi_*.yaml"]
   C --> F
+
+  subgraph D["4. units_contracts"]
+    G[units_contracts.md]
+    F
+  end
 ```
 
 ### 1. ユーザーストーリーの定義 (`user_stories.md`)
@@ -41,7 +45,7 @@ graph TD
 
 ### 4. ユニット間の契約 (`units_contracts.md`)
 
-**入力**: `user_stories.md`, `technical_policies.md`, `units_definition.md`
+**入力**: `technical_policies.md`, `units_definition.md`
 
 - CloudFormation エクスポート/インポートの具体的な定義
 - バックエンド間連携の方針
