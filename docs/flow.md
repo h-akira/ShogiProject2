@@ -9,9 +9,12 @@
 ```mermaid
 graph TD
   A[1. user_stories.md] --> C[3. units_definition.md]
-  B[2. system_architecture.md] --> C
-  C --> D[4. units_contracts.md]
-  D --> E[5. OpenAPI 定義]
+  B[2. technical_policies.md] --> C
+  A --> D[4. units_contracts.md]
+  B --> D
+  C --> D
+  A --> F["5. openapi_*.yaml"]
+  C --> F
 ```
 
 ### 1. ユーザーストーリーの定義 (`user_stories.md`)
@@ -20,7 +23,7 @@ graph TD
 - ユーザーストーリーの列挙
 - 受け入れ条件の記述
 
-### 2. システムアーキテクチャの定義 (`system_architecture.md`)
+### 2. 技術方針の定義 (`technical_policies.md`)
 
 - レイヤーの責務（フロントエンド・バックエンド・インフラ・CI/CD）
 - スタック構成とデプロイ順序
@@ -30,7 +33,7 @@ graph TD
 
 ### 3. 開発ユニット分割 (`units_definition.md`)
 
-**入力**: `user_stories.md`, `system_architecture.md`
+**入力**: `user_stories.md`, `technical_policies.md`
 
 - バックエンドをいくつのマイクロサービスに分割するかを決定する
 - 各ユニット（フロントエンド・各バックエンド・インフラ・CI/CD）の責務を定義する
@@ -38,30 +41,29 @@ graph TD
 
 ### 4. ユニット間の契約 (`units_contracts.md`)
 
-**入力**: `units_definition.md`
+**入力**: `user_stories.md`, `technical_policies.md`, `units_definition.md`
 
 - CloudFormation エクスポート/インポートの具体的な定義
-- 各バックエンドが持つ API のエンドポイント一覧（パス・メソッド・認証要否）→ `_api_list.md` として分離
-  - リクエスト/レスポンスの詳細はこの段階では定義しない
-  - `_api_list.md` は暫定版であり、ステップ 5 の OpenAPI 定義で置き換える（先頭の `_` は一時ファイルであることを示す）
 - バックエンド間連携の方針
   - 連携方式（同期 / 非同期）
   - 認証情報の扱い方
 
-### 5. OpenAPI 定義
+### 5. OpenAPI 定義 (`openapi_*.yaml`)
 
-**入力**: `units_contracts.md`
+**入力**: `user_stories.md`, `units_definition.md`
 
 - 各バックエンドの API を OpenAPI 仕様で詳細に定義する
 - リクエストボディ、レスポンス、エラーの型定義
 - パスパラメータ、クエリパラメータの定義
+- マイクロサービスごとに `openapi_*.yaml` として作成する
+- 作成にあたっては、まず `_api_list.md` としてエンドポイント一覧（パス・メソッド・認証要否）を一時ファイルで作成し、人がレビュー・承認した後に OpenAPI 定義に落とし込む。`_api_list.md` は一時的なものであり、将来の仕様変更時には更新しない
 
 ## 現在の状況
 
 | ステップ | ファイル | 状態 |
 |---------|---------|------|
 | 1 | `user_stories.md` | 完了 |
-| 2 | `system_architecture.md` | 完了 |
+| 2 | `technical_policies.md` | 完了 |
 | 3 | `units_definition.md` | 完了 |
 | 4 | `units_contracts.md` | 完了 |
-| 5 | OpenAPI 定義 | 未着手 |
+| 5 | `openapi_*.yaml` | 未着手 |

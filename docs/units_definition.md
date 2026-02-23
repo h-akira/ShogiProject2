@@ -2,7 +2,7 @@
 
 ## 概要
 
-本ドキュメントは、[user_stories.md](user_stories.md) と [system_architecture.md](system_architecture.md) を入力として、開発ユニットの分割と各ユニットの責務を定義する。
+本ドキュメントは、[user_stories.md](user_stories.md) と [technical_policies.md](technical_policies.md) を入力として、開発ユニットの分割と各ユニットの責務を定義する。
 
 ## ユニット一覧
 
