@@ -10,14 +10,16 @@
 graph TD
   A[1. user_stories.md] --> C[3. units_definition.md]
   B[2. technical_policies.md] --> C
-  B --> G
+
   C --> G
-  A --> F["openapi_*.yaml"]
+  B --> G
+
+  A --> F
   C --> F
 
   subgraph D["4. units_contracts"]
     G[units_contracts.md]
-    F
+    F["openapi_*.yaml"]
   end
 ```
 
