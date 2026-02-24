@@ -1,0 +1,175 @@
+openapi: "3.0.3"
+info:
+  title: ShogiProject Analysis API
+  description: |
+    将棋棋譜管理アプリケーションの解析 API。
+    局面解析リクエストの受付と解析結果の返却を提供する。
+  version: "1.0.0"
+
+servers:
+  - url: /api/v1/analysis
+    description: CloudFront 経由のベースパス
+
+# ---------- Security ----------
+security:
+  - CognitoAuthorizer: []
+
+components:
+  securitySchemes:
+    CognitoAuthorizer:
+      type: apiKey
+      name: Authorization
+      in: header
+      description: "Bearer {Access Token} (Cognito)"
+
+  # ---------- Schemas ----------
+  schemas:
+    ThinkingTime:
+      type: integer
+      enum: [3000, 5000, 10000]
+      description: 思考時間（ミリ秒）
+
+    AnalysisStatus:
+      type: string
+      enum: [pending, running, completed, failed]
+      description: |
+        解析ステータス:
+        - pending: 解析待ち
+        - running: 解析中
+        - completed: 解析完了
+        - failed: 解析失敗
+
+    AnalysisCreateRequest:
+      type: object
+      properties:
+        sfen:
+          type: string
+          description: 解析対象の局面（SFEN 形式）
+        thinking_time:
+          $ref: "#/components/schemas/ThinkingTime"
+      required: [sfen, thinking_time]
+
+    AnalysisCreateResponse:
+      type: object
+      properties:
+        aid:
+          type: string
+          description: 解析リクエスト ID
+        status:
+          $ref: "#/components/schemas/AnalysisStatus"
+      required: [aid, status]
+
+    AnalysisResult:
+      type: object
+      properties:
+        aid:
+          type: string
+          description: 解析リクエスト ID
+        status:
+          $ref: "#/components/schemas/AnalysisStatus"
+        sfen:
+          type: string
+          description: 解析対象の局面（SFEN 形式）
+        thinking_time:
+          $ref: "#/components/schemas/ThinkingTime"
+        candidates:
+          type: array
+          description: 候補手リスト（status=completed の場合のみ）
+          items:
+            $ref: "#/components/schemas/Candidate"
+        error_message:
+          type: string
+          description: エラーメッセージ（status=failed の場合のみ）
+        created_at:
+          type: string
+          format: date-time
+          description: リクエスト日時
+      required: [aid, status, sfen, thinking_time, created_at]
+
+    Candidate:
+      type: object
+      description: 候補手
+      properties:
+        rank:
+          type: integer
+          description: 順位
+        score:
+          type: integer
+          description: 評価値（cp）
+        pv:
+          type: string
+          description: 読み筋（USI 形式）
+      required: [rank, score, pv]
+
+    Error:
+      type: object
+      properties:
+        message:
+          type: string
+          description: エラーメッセージ
+      required: [message]
+
+# ---------- Paths ----------
+paths:
+  /requests:
+    post:
+      summary: 解析リクエストの作成
+      operationId: createAnalysis
+      tags: [Analysis]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AnalysisCreateRequest"
+      responses:
+        "202":
+          description: 受付成功（非同期処理開始）
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AnalysisCreateResponse"
+        "400":
+          description: バリデーションエラー
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          description: 認証エラー
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /requests/{aid}:
+    get:
+      summary: 解析ステータス・結果の取得
+      operationId: getAnalysis
+      tags: [Analysis]
+      parameters:
+        - name: aid
+          in: path
+          required: true
+          description: 解析リクエスト ID
+          schema:
+            type: string
+      responses:
+        "200":
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AnalysisResult"
+        "401":
+          description: 認証エラー
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "404":
+          description: 解析リクエストが見つからない
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"

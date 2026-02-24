@@ -18,7 +18,9 @@ graph TD
   C --> F
 
   subgraph D["4. units_contracts"]
+    direction TB
     G[units_contracts.md]
+    H[_api_list.md]
     F["openapi_*.yaml"]
   end
 ```
@@ -45,7 +47,9 @@ graph TD
 - 各ユニット（フロントエンド・各バックエンド・インフラ・CI/CD）の責務を定義する
 - ユーザーストーリーと各ユニットの対応を整理する
 
-### 4. ユニット間の契約 (`units_contracts.md`)
+### 4. ユニット間の契約
+
+#### 4.1. `units_contracts.md`
 
 **入力**: `technical_policies.md`, `units_definition.md`
 
@@ -54,7 +58,14 @@ graph TD
   - 連携方式（同期 / 非同期）
   - 認証情報の扱い方
 
-### 5. OpenAPI 定義 (`openapi_*.yaml`)
+#### 4.2. API エンドポイント一覧 (`_api_list.md`)
+
+- 各バックエンドの API エンドポイント一覧（パス・メソッド・認証要否）を、人がレビュー・承認するための一時ファイルとして作成する
+- 先頭の `_` は一時ファイルであることを示す
+- 承認後、OpenAPI 定義に落とし込む
+- **このファイルは一時的なものであり、将来の仕様変更時には更新しない**
+
+#### 4.3. OpenAPI 定義 (`openapi_*.yaml`)
 
 **入力**: `user_stories.md`, `units_definition.md`
 
@@ -62,7 +73,6 @@ graph TD
 - リクエストボディ、レスポンス、エラーの型定義
 - パスパラメータ、クエリパラメータの定義
 - マイクロサービスごとに `openapi_*.yaml` として作成する
-- 作成にあたっては、まず `_api_list.md` としてエンドポイント一覧（パス・メソッド・認証要否）を一時ファイルで作成し、人がレビュー・承認した後に OpenAPI 定義に落とし込む。`_api_list.md` は一時的なものであり、将来の仕様変更時には更新しない
 
 ## 現在の状況
 
@@ -71,5 +81,6 @@ graph TD
 | 1 | `user_stories.md` | 完了 |
 | 2 | `technical_policies.md` | 完了 |
 | 3 | `units_definition.md` | 完了 |
-| 4 | `units_contracts.md` | 完了 |
-| 5 | `openapi_*.yaml` | 未着手 |
+| 4.1 | `units_contracts.md` | 完了 |
+| 4.2 | `_api_list.md` | 完了 |
+| 4.3 | `openapi_*.yaml` | 完了 |

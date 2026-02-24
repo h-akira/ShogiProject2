@@ -17,12 +17,13 @@
 
 | メソッド | パス | 認証 | 概要 |
 |---------|------|------|------|
-| GET | `/kifus` | 要 | 棋譜一覧の取得 |
+| GET | `/kifus/recent` | 要 | 最近の棋譜一覧の取得 |
 | POST | `/kifus` | 要 | 棋譜の作成 |
 | GET | `/kifus/explorer` | 要 | フォルダ階層での棋譜取得 |
 | GET | `/kifus/{kid}` | 要 | 棋譜詳細の取得 |
 | PUT | `/kifus/{kid}` | 要 | 棋譜の更新 |
 | DELETE | `/kifus/{kid}` | 要 | 棋譜の削除 |
+| PUT | `/kifus/{kid}/share-code` | 要 | 共有コードの再生成 |
 
 ### 共有棋譜
 

@@ -1,0 +1,818 @@
+openapi: "3.0.3"
+info:
+  title: ShogiProject Main API
+  description: |
+    将棋棋譜管理アプリケーションのメイン API。
+    ユーザー管理、棋譜 CRUD、タグ CRUD、共有棋譜の取得を提供する。
+  version: "1.0.0"
+
+servers:
+  - url: /api/v1/main
+    description: CloudFront 経由のベースパス
+
+# ---------- Security ----------
+security:
+  - CognitoAuthorizer: []
+
+components:
+  securitySchemes:
+    CognitoAuthorizer:
+      type: apiKey
+      name: Authorization
+      in: header
+      description: "Bearer {Access Token} (Cognito)"
+
+  # ---------- Schemas ----------
+  schemas:
+    # ----- Enums -----
+    Side:
+      type: string
+      enum: [none, sente, gote]
+      description: 先後（none=なし, sente=先手, gote=後手）
+
+    Result:
+      type: string
+      enum: [none, win, loss, sennichite, jishogi]
+      description: 勝敗（none=なし, win=勝ち, loss=負け, sennichite=千日手, jishogi=持将棋）
+
+    # ----- User -----
+    User:
+      type: object
+      properties:
+        username:
+          type: string
+          description: ユーザー名
+        email:
+          type: string
+          format: email
+          description: メールアドレス
+        email_verified:
+          type: boolean
+          description: メール認証済みかどうか
+        created_at:
+          type: string
+          format: date-time
+          description: 登録日
+      required: [username, email, email_verified, created_at]
+
+    DeleteUserRequest:
+      type: object
+      properties:
+        password:
+          type: string
+          description: 現在のパスワード（Cognito 認証に使用）
+      required: [password]
+
+    # ----- Tag (summary) -----
+    TagSummary:
+      type: object
+      properties:
+        tid:
+          type: string
+          description: タグ ID
+        name:
+          type: string
+          description: タグ名
+      required: [tid, name]
+
+    # ----- Kifu -----
+    KifuSummary:
+      type: object
+      description: 棋譜一覧で返される概要情報
+      properties:
+        kid:
+          type: string
+          description: 棋譜 ID
+        slug:
+          type: string
+          description: スラグ（階層パス）
+        side:
+          $ref: "#/components/schemas/Side"
+        result:
+          $ref: "#/components/schemas/Result"
+        tags:
+          type: array
+          items:
+            $ref: "#/components/schemas/TagSummary"
+        updated_at:
+          type: string
+          format: date-time
+          description: 更新日時
+      required: [kid, slug, side, result, tags, updated_at]
+
+    KifuDetail:
+      type: object
+      description: 棋譜詳細
+      properties:
+        kid:
+          type: string
+          description: 棋譜 ID
+        slug:
+          type: string
+          description: スラグ（階層パス）
+        side:
+          $ref: "#/components/schemas/Side"
+        result:
+          $ref: "#/components/schemas/Result"
+        tags:
+          type: array
+          items:
+            $ref: "#/components/schemas/TagSummary"
+        memo:
+          type: string
+          description: メモ
+        shared:
+          type: boolean
+          description: 共有が有効かどうか
+        share_code:
+          type: string
+          description: 共有コード（shared=true の場合のみ）
+        kif:
+          type: string
+          description: KIF 形式の棋譜データ
+        created_at:
+          type: string
+          format: date-time
+          description: 作成日時
+        updated_at:
+          type: string
+          format: date-time
+          description: 更新日時
+      required: [kid, slug, side, result, tags, memo, shared, kif, created_at, updated_at]
+
+    KifuCreateRequest:
+      type: object
+      properties:
+        slug:
+          type: string
+          description: スラグ（`/` 区切りで階層化可能。`.kif` は自動付与）
+        side:
+          $ref: "#/components/schemas/Side"
+        result:
+          $ref: "#/components/schemas/Result"
+        tag_ids:
+          type: array
+          items:
+            type: string
+          description: 付与するタグの ID リスト
+        memo:
+          type: string
+          description: メモ
+        shared:
+          type: boolean
+          description: 共有の有効/無効
+        kif:
+          type: string
+          description: KIF 形式の棋譜データ
+      required: [slug, side, result, kif]
+
+    KifuUpdateRequest:
+      type: object
+      properties:
+        slug:
+          type: string
+          description: スラグ
+        side:
+          $ref: "#/components/schemas/Side"
+        result:
+          $ref: "#/components/schemas/Result"
+        tag_ids:
+          type: array
+          items:
+            type: string
+          description: 付与するタグの ID リスト
+        memo:
+          type: string
+          description: メモ
+        shared:
+          type: boolean
+          description: 共有の有効/無効
+        kif:
+          type: string
+          description: KIF 形式の棋譜データ
+      required: [slug, side, result, kif]
+
+    # ----- Explorer -----
+    ExplorerResponse:
+      type: object
+      properties:
+        path:
+          type: string
+          description: 現在のパス
+        folders:
+          type: array
+          items:
+            $ref: "#/components/schemas/FolderEntry"
+        files:
+          type: array
+          items:
+            $ref: "#/components/schemas/FileEntry"
+      required: [path, folders, files]
+
+    FolderEntry:
+      type: object
+      properties:
+        name:
+          type: string
+          description: フォルダ名
+        count:
+          type: integer
+          description: フォルダ内の棋譜数
+      required: [name, count]
+
+    FileEntry:
+      type: object
+      properties:
+        kid:
+          type: string
+          description: 棋譜 ID
+        name:
+          type: string
+          description: ファイル名
+      required: [kid, name]
+
+    # ----- Shared Kifu -----
+    SharedKifuDetail:
+      type: object
+      description: 共有棋譜の詳細（認証不要）
+      properties:
+        slug:
+          type: string
+          description: スラグ
+        side:
+          $ref: "#/components/schemas/Side"
+        result:
+          $ref: "#/components/schemas/Result"
+        memo:
+          type: string
+          description: メモ
+        kif:
+          type: string
+          description: KIF 形式の棋譜データ
+        created_at:
+          type: string
+          format: date-time
+          description: 作成日時
+        updated_at:
+          type: string
+          format: date-time
+          description: 更新日時
+      required: [slug, side, result, memo, kif, created_at, updated_at]
+
+    # ----- Tag -----
+    Tag:
+      type: object
+      properties:
+        tid:
+          type: string
+          description: タグ ID
+        name:
+          type: string
+          description: タグ名
+        created_at:
+          type: string
+          format: date-time
+          description: 作成日時
+        updated_at:
+          type: string
+          format: date-time
+          description: 更新日時
+      required: [tid, name, created_at, updated_at]
+
+    TagDetail:
+      type: object
+      description: タグ詳細（関連棋譜を含む）
+      properties:
+        tid:
+          type: string
+          description: タグ ID
+        name:
+          type: string
+          description: タグ名
+        created_at:
+          type: string
+          format: date-time
+          description: 作成日時
+        updated_at:
+          type: string
+          format: date-time
+          description: 更新日時
+        kifus:
+          type: array
+          items:
+            $ref: "#/components/schemas/TagKifuSummary"
+      required: [tid, name, created_at, updated_at, kifus]
+
+    TagKifuSummary:
+      type: object
+      description: タグに紐づく棋譜の概要
+      properties:
+        kid:
+          type: string
+          description: 棋譜 ID
+        slug:
+          type: string
+          description: スラグ
+        created_at:
+          type: string
+          format: date-time
+          description: 作成日時
+        updated_at:
+          type: string
+          format: date-time
+          description: 更新日時
+      required: [kid, slug, created_at, updated_at]
+
+    TagCreateRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          description: タグ名（1〜127 文字）
+          minLength: 1
+          maxLength: 127
+      required: [name]
+
+    TagUpdateRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          description: タグ名（1〜127 文字）
+          minLength: 1
+          maxLength: 127
+      required: [name]
+
+    # ----- Common -----
+    Error:
+      type: object
+      properties:
+        message:
+          type: string
+          description: エラーメッセージ
+      required: [message]
+
+# ---------- Paths ----------
+paths:
+  # ===== Users =====
+  /users/me:
+    get:
+      summary: ログインユーザーの情報取得
+      operationId: getMe
+      tags: [Users]
+      responses:
+        "200":
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+        "401":
+          description: 認証エラー
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+    delete:
+      summary: アカウント削除
+      operationId: deleteMe
+      tags: [Users]
+      description: |
+        パスワードを受け取り、Lambda が Cognito に対してパスワード検証を行った上で、
+        Cognito ユーザーとアプリケーションデータを一括削除する。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DeleteUserRequest"
+      responses:
+        "204":
+          description: 削除成功
+        "401":
+          description: 認証エラーまたはパスワード不一致
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  # ===== Kifus =====
+  /kifus/recent:
+    get:
+      summary: 最近の棋譜一覧の取得
+      operationId: getRecentKifus
+      tags: [Kifus]
+      description: 最近更新された棋譜を最大 10 件返す。
+      responses:
+        "200":
+          description: 成功
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  kifus:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/KifuSummary"
+                  total_count:
+                    type: integer
+                    description: ユーザーの全棋譜数
+                required: [kifus, total_count]
+        "401":
+          description: 認証エラー
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /kifus:
+    post:
+      summary: 棋譜の作成
+      operationId: createKifu
+      tags: [Kifus]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/KifuCreateRequest"
+      responses:
+        "201":
+          description: 作成成功
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/KifuDetail"
+        "400":
+          description: バリデーションエラー
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          description: 認証エラー
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /kifus/explorer:
+    get:
+      summary: フォルダ階層での棋譜取得
+      operationId: getKifuExplorer
+      tags: [Kifus]
+      parameters:
+        - name: path
+          in: query
+          required: false
+          description: |
+            フォルダパス（省略時はルート）。
+            先頭に `/` を付けない（例: `folder1/folder2`）。
+            末尾の `/` も付けない。
+          schema:
+            type: string
+            default: ""
+          example: "folder1/folder2"
+      responses:
+        "200":
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ExplorerResponse"
+        "401":
+          description: 認証エラー
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /kifus/{kid}:
+    get:
+      summary: 棋譜詳細の取得
+      operationId: getKifu
+      tags: [Kifus]
+      parameters:
+        - name: kid
+          in: path
+          required: true
+          description: 棋譜 ID
+          schema:
+            type: string
+      responses:
+        "200":
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/KifuDetail"
+        "401":
+          description: 認証エラー
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "404":
+          description: 棋譜が見つからない
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+    put:
+      summary: 棋譜の更新
+      operationId: updateKifu
+      tags: [Kifus]
+      parameters:
+        - name: kid
+          in: path
+          required: true
+          description: 棋譜 ID
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/KifuUpdateRequest"
+      responses:
+        "200":
+          description: 更新成功
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/KifuDetail"
+        "400":
+          description: バリデーションエラー
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          description: 認証エラー
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "404":
+          description: 棋譜が見つからない
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+    delete:
+      summary: 棋譜の削除
+      operationId: deleteKifu
+      tags: [Kifus]
+      parameters:
+        - name: kid
+          in: path
+          required: true
+          description: 棋譜 ID
+          schema:
+            type: string
+      responses:
+        "204":
+          description: 削除成功
+        "401":
+          description: 認証エラー
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "404":
+          description: 棋譜が見つからない
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /kifus/{kid}/share-code:
+    put:
+      summary: 共有コードの再生成
+      operationId: regenerateShareCode
+      tags: [Kifus]
+      description: |
+        共有コードをランダムに再生成する。
+        既存の共有リンクは無効になる。
+      parameters:
+        - name: kid
+          in: path
+          required: true
+          description: 棋譜 ID
+          schema:
+            type: string
+      responses:
+        "200":
+          description: 再生成成功
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  share_code:
+                    type: string
+                    description: 新しい共有コード
+                required: [share_code]
+        "401":
+          description: 認証エラー
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "404":
+          description: 棋譜が見つからない
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  # ===== Shared =====
+  /shared/{share_code}:
+    get:
+      summary: 共有棋譜の取得
+      operationId: getSharedKifu
+      tags: [Shared]
+      security: []
+      parameters:
+        - name: share_code
+          in: path
+          required: true
+          description: 共有コード
+          schema:
+            type: string
+      responses:
+        "200":
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SharedKifuDetail"
+        "404":
+          description: 共有棋譜が見つからない
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  # ===== Tags =====
+  /tags:
+    get:
+      summary: タグ一覧の取得
+      operationId: getTags
+      tags: [Tags]
+      responses:
+        "200":
+          description: 成功
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  tags:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Tag"
+                required: [tags]
+        "401":
+          description: 認証エラー
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+    post:
+      summary: タグの作成
+      operationId: createTag
+      tags: [Tags]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TagCreateRequest"
+      responses:
+        "201":
+          description: 作成成功
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Tag"
+        "400":
+          description: バリデーションエラー
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          description: 認証エラー
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /tags/{tid}:
+    get:
+      summary: タグ詳細の取得（関連棋譜含む）
+      operationId: getTag
+      tags: [Tags]
+      parameters:
+        - name: tid
+          in: path
+          required: true
+          description: タグ ID
+          schema:
+            type: string
+      responses:
+        "200":
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TagDetail"
+        "401":
+          description: 認証エラー
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "404":
+          description: タグが見つからない
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+    put:
+      summary: タグの更新
+      operationId: updateTag
+      tags: [Tags]
+      parameters:
+        - name: tid
+          in: path
+          required: true
+          description: タグ ID
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TagUpdateRequest"
+      responses:
+        "200":
+          description: 更新成功
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Tag"
+        "400":
+          description: バリデーションエラー
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          description: 認証エラー
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "404":
+          description: タグが見つからない
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+    delete:
+      summary: タグの削除
+      operationId: deleteTag
+      tags: [Tags]
+      parameters:
+        - name: tid
+          in: path
+          required: true
+          description: タグ ID
+          schema:
+            type: string
+      responses:
+        "204":
+          description: 削除成功
+        "401":
+          description: 認証エラー
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "404":
+          description: タグが見つからない
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
