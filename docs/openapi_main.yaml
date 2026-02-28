@@ -457,6 +457,12 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Error"
+        "409":
+          description: slug が既に存在する
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
 
   /kifus/explorer:
     get:
@@ -559,6 +565,12 @@ paths:
                 $ref: "#/components/schemas/Error"
         "404":
           description: 棋譜が見つからない
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "409":
+          description: slug が既に存在する
           content:
             application/json:
               schema:
@@ -714,6 +726,12 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Error"
+        "409":
+          description: タグ名が既に存在する
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
 
   /tags/{tid}:
     get:
@@ -785,6 +803,12 @@ paths:
                 $ref: "#/components/schemas/Error"
         "404":
           description: タグが見つからない
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "409":
+          description: タグ名が既に存在する
           content:
             application/json:
               schema:
