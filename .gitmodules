@@ -1,6 +1,9 @@
 [submodule "Frontend"]
 	path = Frontend
 	url = git@github.com:h-akira/ShogiProject2_Frontend.git
-[submodule "Backend"]
-	path = Backend
-	url = git@github.com:h-akira/ShogiProject2_Backend.git
+[submodule "Backend/analysis"]
+	path = Backend/analysis
+	url = git@github.com:h-akira/ShogiProject2_Backend_analysis.git
+[submodule "Backend/main"]
+	path = Backend/main
+	url = git@github.com:h-akira/ShogiProject2_Backend_main.git
