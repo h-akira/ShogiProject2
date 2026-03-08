@@ -35,8 +35,14 @@ python -m pytest tests/test_us1_auth.py -v
 # ブラウザ表示付き（デバッグ用）
 python -m pytest tests/test_us1_auth.py -v --headed
 
-# スクリーンショット付き（失敗時）
+# スクリーンショット（失敗時のみ）
 python -m pytest tests/ -v --screenshot=only-on-failure
+
+# スクリーンショット（全テスト）
+python -m pytest tests/ -v --screenshot=on
+
+# マークダウンレポート出力
+python -m pytest tests/ -v --md=report.md
 ```
 
 ## テストファイル構成

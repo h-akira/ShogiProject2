@@ -4,3 +4,5 @@ __pycache__/
 .pytest_cache/
 *.pyc
 auth_storage_state.json
+test-results/
+report.md

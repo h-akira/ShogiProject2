@@ -33,6 +33,8 @@ def _auth_storage_state(browser: Browser) -> str:
   """Perform Cognito login once and save storage state for reuse."""
   context = browser.new_context()
   page = context.new_page()
+  page.set_default_timeout(15000)
+  page.set_default_navigation_timeout(30000)
 
   # Navigate to the site
   page.goto(BASE_URL, wait_until="networkidle")
@@ -85,10 +87,13 @@ def authenticated_context(
 
 @pytest.fixture(scope="function")
 def authenticated_page(
-  authenticated_context: BrowserContext, _auth_storage_state: str
+  request, authenticated_context: BrowserContext, _auth_storage_state: str
 ) -> Page:
   """Provide a logged-in page with sessionStorage restored."""
   page = authenticated_context.new_page()
+  page.set_default_timeout(15000)
+  page.set_default_navigation_timeout(30000)
+  request.node._page = page
 
   # Navigate to site first, then restore sessionStorage
   page.goto(BASE_URL, wait_until="networkidle")
@@ -113,9 +118,34 @@ def authenticated_page(
 
 
 @pytest.fixture(scope="function")
-def unauthenticated_page(browser: Browser) -> Page:
+def unauthenticated_page(request, browser: Browser) -> Page:
   """Provide a clean page without any auth state."""
   context = browser.new_context()
   page = context.new_page()
+  page.set_default_timeout(15000)
+  page.set_default_navigation_timeout(30000)
+  request.node._page = page
   yield page
   context.close()
+
+
+SCREENSHOT_DIR = Path(__file__).parent / "test-results"
+
+
+@pytest.hookimpl(hookwrapper=True)
+def pytest_runtest_makereport(item, call):
+  outcome = yield
+  report = outcome.get_result()
+  if report.when != "call":
+    return
+  screenshot_opt = item.config.getoption("--screenshot", default="off")
+  if screenshot_opt == "off":
+    return
+  if screenshot_opt == "only-on-failure" and not report.failed:
+    return
+  page = getattr(item, "_page", None)
+  if page is None or page.is_closed():
+    return
+  SCREENSHOT_DIR.mkdir(exist_ok=True)
+  name = item.nodeid.replace("/", "_").replace("::", "__").replace("[", "_").replace("]", "")
+  page.screenshot(path=str(SCREENSHOT_DIR / f"{name}.png"))
