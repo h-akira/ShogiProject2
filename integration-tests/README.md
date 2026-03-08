@@ -60,7 +60,7 @@ python -m pytest tests/ -v --md=report.md
 
 ## 注意事項
 
-- テスト対象は `BASE_URL`（デフォルト: `https://shogi-dev.h-akira.net`）
+- テスト対象は `BASE_URL`（デフォルト: `https://shogi-dev.example.com`）
 - US-7.2（アカウント削除）はページ表示の確認のみ（実際の削除は実行しない）
 - US-1.1（アカウント作成）はサインアップ画面への遷移確認のみ
 - テストで作成した棋譜・タグはテスト内でクリーンアップする
