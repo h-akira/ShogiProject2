@@ -1,4 +1,4 @@
-# CLAUDE.md
+# AGENTS.md
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
@@ -6,16 +6,35 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 将棋の棋譜管理Webアプリケーション。AWS上にサーバーレスアーキテクチャで構築。
 
-## リポジトリ構成
+## リポジトリ構成とアーキテクチャ
 
 Git サブモジュールで管理されたマルチリポジトリ構成。ユニット別のディレクトリ・リポジトリ名の一覧は `docs/units_contracts.md` の「ユニット別定義」を参照すること（情報の重複による不整合を防ぐため、ここには転記しない）。
 
+```
+ShogiProject/
+├── Frontend/          # フロントエンド (Vue 3 SPA)
+├── Backend/
+│   ├── analysis/      # 解析 API (Python, SAM)
+│   └── main/          # メイン API (Python, SAM)
+├── Infra/             # インフラ (CDK)
+├── CICD/              # CI/CD (CloudFormation)
+└── docs/              # 共有設計ドキュメント（本リポジトリ直下で管理）
+```
+
 `docs/` はサブモジュールではなく、本リポジトリ直下で管理する共有設計ドキュメント群。各ユニット固有の詳細設計はサブモジュール内の `docs/` に配置する（例: `Backend/main/docs/`）。
 
-## 設計ドキュメント (`docs/`)
+アーキテクチャの詳細は `docs/technical_policies.md` および `docs/units_contracts.md` を参照。
+
+- フロントエンド: Vue 3 SPA（`shogi-board/` ライブラリ + `shogi-main/` アプリ）
+- バックエンド: Python, API Gateway + Lambda (SAM), DynamoDB
+- インフラ: CloudFront, S3, Cognito (CDK)
+- CI/CD: CodeBuild (CloudFormation)
+
+## ドキュメント (`docs/`)
+
+### 設計ドキュメント
 
 ドキュメントは依存関係を持ち、段階的に作成されている。詳細は `docs/flow.md` を参照。
-**コードの実装・修正時は、関連するドキュメントを事前に読んで設計意図を理解すること。**
 
 | ファイル | 責務 |
 |---------|------|
@@ -24,22 +43,27 @@ Git サブモジュールで管理されたマルチリポジトリ構成。ユ�
 | `technical_policies.md` | 技術方針。レイヤー構成・技術選定・Lambdalith 等の設計原則 |
 | `units_definition.md` | 開発ユニット分割と各ユニットの責務。ユーザーストーリーとの対応表 |
 | `units_contracts.md` | ユニット間契約。命名規約・CloudFormation エクスポート・通信仕様 |
-| `_api_list.md` | API エンドポイント一覧（一時ファイル。将来の仕様変更時には更新しない） |
-| `openapi_*.yaml` | OpenAPI 定義。マイクロサービスごとに作成 |
+| `_api_list.md` | `openapi_*.yaml` を作成するための一時ファイル（役割を終えたため `docs/old/` に移動済み。仕様変更時には更新しない） |
+| `openapi_analysis.yaml` | 解析 API の OpenAPI 定義 |
+| `openapi_main.yaml` | メイン API の OpenAPI 定義 |
 
-## 仕様変更通知 (`docs/fix/`)
+### 技術調査ドキュメント (`docs/research/`)
 
-いずれかのユニット（Frontend, Backend, Infra 等）の都合で `openapi_*.yaml` や `units_contracts.md` などの共有ドキュメントに修正が入った場合、**他ユニットへの影響を伝えるために `docs/fix/XXX_任意の名前.md` を作成する**。
+技術調査ドキュメント（Aurora DSQL、Vue テスト等）が格納されている。設計ドキュメントとは独立した参考資料であり、実装時に技術的な背景を確認したい場合に参照すること。
+
+### 仕様変更通知 (`docs/changes/`)
+
+いずれかのユニット（Frontend, Backend, Infra 等）の都合で共有ドキュメントに修正が入った場合に作成する通知ファイル。
 
 - `XXX` は 3 桁の連番（`001`, `002`, ...）。既存ファイルの最大番号 + 1 を採番する
 - 内容: 変更概要、対象ファイル・エンドポイント、影響を受けるユニット、各ユニットで必要な対応
-- 変更を行ったタイミングで必ず作成すること
 
-## アーキテクチャ
+## 開発ルール
 
-詳細は `docs/technical_policies.md` および `docs/units_contracts.md` を参照。
+本プロジェクトは `docs/` 配下の共有設計ドキュメントを**唯一の正（Single Source of Truth）**とする。以下のルールを必ず守ること。
 
-- フロントエンド: Vue 3 SPA（`shogi-board/` ライブラリ + `shogi-main/` アプリ）
-- バックエンド: Python, API Gateway + Lambda (SAM), DynamoDB
-- インフラ: CloudFront, S3, Cognito (CDK)
-- CI/CD: CodeBuild (CloudFormation)
+- **実装前に関連ドキュメントを読む（必須）**: `docs/` の関連ドキュメントを読むことは実装の前提条件である。関連ドキュメントを読まずに実装・修正を開始してはならない
+- **プロジェクトルートの `docs/` を絶対的な正とする**: 各ユニットの実装は `docs/` の定義（API 契約・命名規約・通信仕様等）に厳密に従うこと
+- **他のサブモジュールは原則読み込まない**: 開発中は作業対象のサブモジュールのみを参照する。他ユニットの内部実装に依存してはならない。ただし、結合・統合フェーズで複数ユニットにまたがる作業が必要な場合は、開発者の指示のもと他のサブモジュールを参照・修正してよい
+- **サブモジュール内の `docs/` にも従い、必要に応じて更新する**: 作業対象サブモジュール内に `docs/` がある場合、そこに記載されたルール・設計にも従うこと。実装に伴い内容の更新が必要であれば更新する
+- **プロジェクトルートの `docs/` の変更には開発者の許可が必要**: 共有ドキュメントは全ユニットに影響するため、変更が必要な場合は必ず開発者に確認を取ること。変更した場合は仕様変更通知を作成すること（詳細は「仕様変更通知」セクションを参照）

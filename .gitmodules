@@ -7,3 +7,9 @@
 [submodule "Backend/main"]
 	path = Backend/main
 	url = git@github.com:h-akira/ShogiProject2_Backend_main.git
+[submodule "Infra"]
+	path = Infra
+	url = git@github.com:h-akira/ShogiProject2_Infra.git
+[submodule "CICD"]
+	path = CICD
+	url = git@github.com:h-akira/ShogiProject2_CICD.git

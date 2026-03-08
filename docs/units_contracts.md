@@ -58,7 +58,7 @@ AWS リソースの命名やリポジトリ管理に使用する変数を以下�
 graph LR
   infra -->|Cognito 情報| backend-main
   infra -->|Cognito 情報| backend-analysis
-  infra -->|Cognito 情報, CloudFront 情報等| cicd
+  infra -->|Cognito 情報, CloudFront 情報等| frontend
   backend-main -->|API Gateway ID| infra
   backend-analysis -->|API Gateway ID| infra
 ```
@@ -73,7 +73,7 @@ infra ↔ backend-main / backend-analysis 間に循環依存が存在する。�
 |------|-----|------|-------|
 | `${project}-${env}-infra-CognitoUserPoolArn` | User Pool ARN | API Gateway の Cognito Authorizer | backend-main, backend-analysis |
 | `${project}-${env}-infra-CognitoUserPoolId` | User Pool ID | Lambda での認証検証（必要な場合） | backend-main, backend-analysis |
-| `${project}-${env}-infra-CognitoClientId` | App Client ID | Lambda での認証検証（必要な場合） | backend-main, backend-analysis, CI/CD |
+| `${project}-${env}-infra-CognitoClientId` | App Client ID | Lambda での認証検証（必要な場合） | backend-main, backend-analysis |
 
 ### バックエンド → インフラ（API Gateway ID）
 
@@ -93,17 +93,36 @@ CloudFront でのパスパターン割り当ては以下の通り。
 | `backend-main` | `/api/v1/main/*` |
 | `backend-analysis` | `/api/v1/analysis/*` |
 
-### インフラ → CI/CD（デプロイ先情報）
+### インフラ → フロントエンド（デプロイ先・ビルド時情報）
 
-CI/CD パイプラインがデプロイやビルド時の環境変数注入に使用する。
+フロントエンドの `buildspec.yml` が CloudFormation エクスポートから値を取得し、デプロイ先の特定やビルド時の環境変数設定に使用する。
 
-| キー | 値 | 用途 | 参照先 |
-|------|-----|------|-------|
-| `${project}-${env}-infra-S3BucketName` | バケット名 | フロントエンドのデプロイ先 | CI/CD |
-| `${project}-${env}-infra-CloudFrontDistributionId` | Distribution ID | キャッシュ無効化の対象 | CI/CD |
-| `${project}-${env}-infra-CloudFrontDomainName` | ドメイン名 | フロントエンドビルド時の環境変数注入 | CI/CD |
-| `${project}-${env}-infra-CognitoClientId` | App Client ID | フロントエンドビルド時の環境変数注入 | CI/CD |
-| `${project}-${env}-infra-CognitoDomain` | Cognito ドメイン | フロントエンドビルド時の環境変数注入 | CI/CD |
+| キー | 値 | 用途 |
+|------|-----|------|
+| `${project}-${env}-infra-S3BucketName` | バケット名 | デプロイ先 S3 バケット |
+| `${project}-${env}-infra-CloudFrontDistributionId` | Distribution ID | キャッシュ無効化の対象 |
+| `${project}-${env}-infra-DomainName` | カスタムドメイン名 | `VITE_REDIRECT_URI` の生成 |
+| `${project}-${env}-infra-CognitoUserPoolId` | User Pool ID | `VITE_COGNITO_AUTHORITY` の生成 |
+| `${project}-${env}-infra-CognitoClientId` | App Client ID | `VITE_COGNITO_CLIENT_ID` |
+| `${project}-${env}-infra-CognitoDomain` | Cognito ドメイン | `VITE_COGNITO_DOMAIN` |
+
+---
+
+## CI/CD → 各サービス（CodeBuild 環境変数）
+
+CI/CD ユニットが CodeBuild プロジェクトの `EnvironmentVariables` として注入し、各サービスの `buildspec.yml` が参照する。
+
+### 共通
+
+| 環境変数 | 値の出所 | 用途 |
+|---------|---------|------|
+| `ENV` | CI/CD パラメータ（`dev`, `pro`） | スタック名・パラメータの環境切り替え |
+
+### フロントエンド固有
+
+| 環境変数 | 値の出所 | 用途 |
+|---------|---------|------|
+| `PROJECT` | 固定値（`sgp`） | CloudFormation エクスポート名のプレフィックス |
 
 ---
 
@@ -119,19 +138,6 @@ CI/CD パイプラインがデプロイやビルド時の環境変数注入に�
 各バックエンドの API エンドポイント一覧は [_api_list.md](_api_list.md) を参照。
 
 > `_api_list.md` は暫定版であり、OpenAPI 定義で置き換える予定。
-
----
-
-## フロントエンドビルド時の環境変数
-
-CI/CD パイプラインがエクスポート値を取得し、フロントエンドのビルド時に以下の環境変数として注入する。
-
-| 環境変数 | 値の出所 | 用途 |
-|---------|---------|------|
-| `VITE_COGNITO_AUTHORITY` | `infra`（Cognito） | OIDC Issuer URL |
-| `VITE_COGNITO_CLIENT_ID` | `infra`（Cognito） | App Client ID |
-| `VITE_REDIRECT_URI` | `infra`（CloudFront） | OIDC コールバック URL |
-| `VITE_API_BASE_URL` | - | API ベースパス（`/api/v1`） |
 
 ---
 
