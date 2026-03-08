@@ -101,9 +101,7 @@ class TestUS5_3_TagDetail:
     expect(page.get_by_text(tag_name)).to_be_visible()
 
     # Should show empty message since no kifus are associated
-    empty_msg = page.get_by_text("このタグが付与された棋譜はありません")
-    table = page.locator(".p-datatable")
-    expect(empty_msg.or_(table)).to_be_visible()
+    expect(page.locator(".empty-message")).to_be_visible()
 
     # Cleanup
     page.goto(f"{base_url}/tags", wait_until="networkidle")
