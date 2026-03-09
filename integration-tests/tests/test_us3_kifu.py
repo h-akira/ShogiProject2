@@ -132,6 +132,47 @@ class TestUS3_2_KifuCreate:
     _delete_current_kifu(page)
 
 
+class TestUS3_3_KifuBoardInput:
+  """US-3.3: Shogi board GUI input."""
+
+  def test_board_input_undo(
+    self, authenticated_page: Page, base_url: str
+  ):
+    """Undo button reverts the last move in input mode."""
+    page = authenticated_page
+    page.goto(f"{base_url}/kifus/new", wait_until="networkidle")
+
+    # Default mode is board input - the board should be visible
+    board = page.locator(".shogi-board-container")
+    board.wait_for(state="visible", timeout=10000)
+
+    # Game info should show 0 moves initially
+    game_info = page.locator(".game-info")
+    expect(game_info).to_contain_text("0")
+
+    # Click a square to select piece (77 = row 6, col 6 in 0-indexed -> 7七歩)
+    # Then click destination to move
+    squares = page.locator(".board .square")
+    # Select 7七 (row=6, col=6 -> index = 6*9+6 = 60)
+    squares.nth(60).click()
+    page.wait_for_timeout(300)
+    # Move to 7六 (row=5, col=6 -> index = 5*9+6 = 51)
+    squares.nth(51).click()
+    page.wait_for_timeout(300)
+
+    # Move count should be 1
+    expect(game_info).to_contain_text("1")
+
+    # Click undo button
+    undo_btn = page.get_by_role("button", name="一手戻す")
+    expect(undo_btn).to_be_visible()
+    undo_btn.click()
+    page.wait_for_timeout(300)
+
+    # Move count should be back to 0
+    expect(game_info).to_contain_text("0")
+
+
 class TestUS3_4_KifuTextInput:
   """US-3.4: KIF text input mode."""
 
@@ -213,6 +254,87 @@ class TestUS3_6_KifuEdit:
     page.wait_for_load_state("networkidle")
     _delete_current_kifu(page)
 
+  def test_edit_kifu_board_preload(
+    self, authenticated_page: Page, base_url: str
+  ):
+    """Edit page preloads KIF data into the shogi board (not just initial position)."""
+    page = authenticated_page
+    slug = _unique_slug()
+
+    _create_kifu(page, base_url, slug)
+
+    # Navigate to edit
+    page.get_by_role("button", name="編集").click()
+    page.wait_for_load_state("networkidle")
+
+    # Wait for board to load with KIF data
+    board = page.locator(".shogi-board-container")
+    board.wait_for(state="visible", timeout=10000)
+    page.wait_for_timeout(1000)
+
+    # Game info should show move count > 0 (SAMPLE_KIF has 3 moves)
+    game_info = page.locator(".game-info")
+    expect(game_info).to_contain_text("3")
+
+    # Go back and cleanup
+    page.go_back()
+    page.wait_for_load_state("networkidle")
+    _delete_current_kifu(page)
+
+  def test_edit_kifu_preserves_kif_data(
+    self, authenticated_page: Page, base_url: str
+  ):
+    """Updating in board mode preserves KIF data (no data loss)."""
+    page = authenticated_page
+    slug = _unique_slug()
+
+    _create_kifu(page, base_url, slug)
+
+    # Navigate to edit
+    page.get_by_role("button", name="編集").click()
+    page.wait_for_url(re.compile(r"/edit$"), timeout=30000)
+    page.wait_for_load_state("networkidle")
+
+    # Wait for form to finish loading (spinner → form)
+    memo_field = page.locator("#memo")
+    memo_field.wait_for(state="visible", timeout=30000)
+    page.wait_for_timeout(1000)
+
+    # Update in board mode (default) - just change memo
+    memo_field.clear()
+    memo_field.fill("E2E preserve test")
+
+    with page.expect_response(
+      lambda resp: "/kifus/" in resp.url and resp.request.method == "PUT",
+      timeout=30000
+    ) as resp_info:
+      page.get_by_role("button", name="更新").click()
+
+    expect(page).not_to_have_url(re.compile(r"/edit$"), timeout=30000)
+
+    # Verify KIF data is preserved by going to edit again
+    page.get_by_role("button", name="編集").click()
+    page.wait_for_url(re.compile(r"/edit$"), timeout=30000)
+    page.wait_for_load_state("networkidle")
+    # Wait for edit form to load
+    page.locator("#memo").wait_for(state="visible", timeout=30000)
+
+    # Switch to text mode to check KIF content
+    page.get_by_text("テキスト").click()
+    page.wait_for_timeout(500)
+
+    kif_textarea = page.locator("#kif-text")
+    kif_textarea.wait_for(state="visible", timeout=10000)
+    kif_value = kif_textarea.input_value()
+
+    # KIF should contain moves (not just header)
+    assert "７六歩" in kif_value, f"KIF data lost after update. Content: {kif_value}"
+
+    # Go back and cleanup
+    page.go_back()
+    page.wait_for_load_state("networkidle")
+    _delete_current_kifu(page)
+
   def test_edit_kifu_update(
     self, authenticated_page: Page, base_url: str
   ):
@@ -242,6 +364,54 @@ class TestUS3_6_KifuEdit:
     expect(page).not_to_have_url(re.compile(r"/edit$"), timeout=30000)
 
     # Cleanup
+    _delete_current_kifu(page)
+
+  def test_edit_kifu_discard_changes(
+    self, authenticated_page: Page, base_url: str
+  ):
+    """Discard changes button restores saved data."""
+    page = authenticated_page
+    slug = _unique_slug()
+
+    _create_kifu(page, base_url, slug)
+
+    # Navigate to edit
+    page.get_by_role("button", name="編集").click()
+    page.wait_for_url(re.compile(r"/edit$"), timeout=30000)
+    page.wait_for_load_state("networkidle")
+
+    # Wait for form to finish loading
+    memo_field = page.locator("#memo")
+    memo_field.wait_for(state="visible", timeout=30000)
+
+    # Modify memo
+    memo_field.clear()
+    memo_field.fill("This should be discarded")
+
+    # Click discard button (inside shogi board input controls)
+    board_container = page.locator(".shogi-board-container")
+    discard_btn = board_container.get_by_role("button", name="変更を破棄")
+    expect(discard_btn).to_be_visible()
+    discard_btn.click()
+
+    # Confirmation dialog should appear
+    dialog = page.locator(".p-dialog")
+    expect(dialog).to_be_visible()
+    dialog_text = dialog.get_by_text("編集内容を破棄して、保存済みの棋譜を復元しますか？")
+    expect(dialog_text).to_be_visible()
+
+    # Confirm discard
+    dialog.get_by_role("button", name="破棄する").click()
+    page.wait_for_timeout(500)
+
+    # Memo should be restored to original (empty or original value)
+    memo_value = memo_field.input_value()
+    assert memo_value != "This should be discarded", \
+      "Memo was not restored after discard"
+
+    # Go back and cleanup
+    page.go_back()
+    page.wait_for_load_state("networkidle")
     _delete_current_kifu(page)
 
 
