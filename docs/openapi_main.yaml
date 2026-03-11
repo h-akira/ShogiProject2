@@ -391,7 +391,13 @@ paths:
         "204":
           description: 削除成功
         "401":
-          description: 認証エラーまたはパスワード不一致
+          description: 認証エラー（トークン無効・期限切れ）
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "403":
+          description: パスワード不一致
           content:
             application/json:
               schema:
