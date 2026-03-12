@@ -20,10 +20,11 @@ ShogiProject/
 ├── CICD/              # CI/CD (CloudFormation)
 ├── docs/              # 共有設計ドキュメント
 ├── bugs/              # バグ管理
+├── enhancements/      # 改善・仕様追加・改良管理
 └── integration-tests/ # 結合テスト (Playwright)
 ```
 
-`Frontend/`, `Backend/`, `Infra/`, `CICD/` は Git サブモジュール。`docs/`, `bugs/`, `integration-tests/` は本リポジトリ直下で管理する共有リソースである。各ユニット固有の詳細設計はサブモジュール内の `docs/` に配置する（例: `Backend/main/docs/`）。
+`Frontend/`, `Backend/`, `Infra/`, `CICD/` は Git サブモジュール。`docs/`, `bugs/`, `enhancements/`, `integration-tests/` は本リポジトリ直下で管理する共有リソースである。各ユニット固有の詳細設計はサブモジュール内の `docs/` に配置する（例: `Backend/main/docs/`）。
 
 アーキテクチャの詳細は `docs/technical_policies.md` および `docs/units_contracts.md` を参照。
 
@@ -68,6 +69,16 @@ ShogiProject/
 - テンプレート: `bugs/XXX_template.md` に従って作成すること
 - ステータス: 「未修正」「対応不要」「修正済み（検証待ち）」「修正済み（検証済み）」「その他」のいずれか
 - バグ修正時は、修正内容を「対応」セクションに追記し、ステータスを更新すること
+
+## 改善管理 (`enhancements/`)
+
+改善・仕様追加・改良を `enhancements/` 配下に Markdown ファイルとして管理する。
+
+- ファイル名: `XXX_（概要を表すスネークケース）.md`（`XXX` は 3 桁の連番）
+- テンプレート: `enhancements/XXX_template.md` に従って作成すること
+- 種別: 「仕様追加」「改善」「改良」のいずれか
+- ステータス: 「未着手」「対応中」「対応不要」「完了（検証待ち）」「完了（検証済み）」「その他」のいずれか
+- 対応完了時は、対応内容を「対応」セクションに追記し、ステータスを更新すること
 
 ## 開発ルール
 
