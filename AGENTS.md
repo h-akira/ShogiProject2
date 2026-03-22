@@ -11,7 +11,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 Git サブモジュールで管理されたマルチリポジトリ構成。ユニット別のディレクトリ・リポジトリ名の一覧は `docs/units_contracts.md` の「ユニット別定義」を参照。
 
 ```
-ShogiProject/
+ShogiProject2/
 ├── Frontend/          # フロントエンド (Vue 3 SPA)
 ├── Backend/
 │   ├── analysis/      # 解析 API (Python, SAM)
